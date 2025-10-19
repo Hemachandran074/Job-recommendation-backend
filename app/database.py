@@ -49,35 +49,62 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db():
     """Initialize database - create tables and enable pgvector"""
     from sqlalchemy import text
+    import logging
     
-    async with engine.begin() as conn:
-        # Enable pgvector extension
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        
-        # Import models to ensure they're registered
-        from app import models
-        
-        # Create all tables
-        await conn.run_sync(Base.metadata.create_all)
-        
-        # Create indexes for better performance
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_jobs_embedding ON jobs 
-            USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-        """))
-        
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_users_resume_embedding ON users 
-            USING ivfflat (resume_embedding vector_cosine_ops) WITH (lists = 100);
-        """))
-        
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs (created_at DESC);
-        """))
-        
-        await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs (company);
-        """))
+    logger = logging.getLogger(__name__)
+    
+    try:
+        async with engine.begin() as conn:
+            # Enable pgvector extension
+            try:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                logger.info("✅ pgvector extension enabled")
+            except Exception as e:
+                logger.warning(f"⚠️ pgvector extension setup: {e}")
+            
+            # Import models to ensure they're registered
+            from app import models
+            
+            # Create all tables
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Database tables created")
+            
+            # Create indexes for better performance
+            try:
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_jobs_embedding ON jobs 
+                    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+                """))
+            except Exception as e:
+                logger.warning(f"⚠️ Could not create jobs embedding index: {e}")
+            
+            try:
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_users_resume_embedding ON users 
+                    USING ivfflat (resume_embedding vector_cosine_ops) WITH (lists = 100);
+                """))
+            except Exception as e:
+                logger.warning(f"⚠️ Could not create users embedding index: {e}")
+            
+            try:
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs (created_at DESC);
+                """))
+            except Exception as e:
+                logger.warning(f"⚠️ Could not create jobs timestamp index: {e}")
+            
+            try:
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs (company);
+                """))
+            except Exception as e:
+                logger.warning(f"⚠️ Could not create jobs company index: {e}")
+            
+            logger.info("✅ Database initialization complete")
+            
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        raise
 
 
 async def close_db():

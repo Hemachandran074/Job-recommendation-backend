@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: job-recommendation-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: job-recommendation-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: API_TITLE
+        value: Job Recommendation API
+      - key: CORS_ORIGINS
+        value: "*"
+
+databases:
+  - name: job-recommendation-db
+    databaseName: job_recommendation
+    plan: starter

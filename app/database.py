@@ -3,6 +3,7 @@ Database connection and session management
 """
 import logging
 from typing import AsyncGenerator
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
@@ -10,11 +11,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Create async engine with pooler connection
+# Create async engine
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    poolclass=NullPool,  # Important: Use NullPool with external pooler
+    echo=False,  # Set to False to reduce logging
+    poolclass=NullPool,
     pool_pre_ping=True,
 )
 
@@ -45,14 +46,14 @@ async def init_db():
     try:
         logger.info("🔄 Testing database connection...")
 
-        # Test connection
+        # Test connection - FIX: Use text() for raw SQL
         async with engine.begin() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
             logger.info("✅ Database connection successful!")
 
             # Enable pgvector extension
             try:
-                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 logger.info("✅ pgvector extension enabled")
             except Exception as e:
                 logger.warning(f"⚠️  pgvector extension: {e}")
@@ -63,21 +64,21 @@ async def init_db():
 
             # Create indexes (optional - skip if fails)
             try:
-                await conn.execute("""
+                await conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS idx_job_embedding 
                     ON jobs USING ivfflat (embedding vector_cosine_ops)
                     WITH (lists = 100)
-                """)
+                """))
                 logger.info("✅ Job embedding index created")
             except Exception as e:
                 logger.warning(f"⚠️  Index creation skipped: {e}")
 
             try:
-                await conn.execute("""
+                await conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS idx_user_embedding 
                     ON users USING ivfflat (resume_embedding vector_cosine_ops)
                     WITH (lists = 100)
-                """)
+                """))
                 logger.info("✅ User embedding index created")
             except Exception as e:
                 logger.warning(f"⚠️  Index creation skipped: {e}")

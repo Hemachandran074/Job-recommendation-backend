@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # ML Model
-    MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_DIMENSION: int = 384
+    MODEL_NAME: str = "sentence-transformers/embedding-gemma"
+    EMBEDDING_DIMENSION: int = 768
     BATCH_SIZE: int = 32
     
     # RapidAPI (Optional)

@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     # - sentence-transformers/all-mpnet-base-v2 (768 dims, 420MB, no approval needed)
     # - sentence-transformers/all-MiniLM-L6-v2 (384 dims, 22MB, no approval needed)
     # - google/embeddinggemma-300m (768 dims, 300MB, requires HuggingFace approval)
-    MODEL_NAME: str = "BAAI/bge-m3"
-    EMBEDDING_DIMENSION: int = 1024
+    MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSION: int = 384
     BATCH_SIZE: int = 32
     HUGGINGFACE_TOKEN: Optional[str] = None
     

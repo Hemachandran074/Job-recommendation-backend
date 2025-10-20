@@ -5,140 +5,121 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime
-import logging
 from sqlalchemy import text
+import logging
 
 from app.config import settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, get_engine
 from app.ml_service import ml_service
-from app.routers import jobs, recommendations, users, rapidapi
-from app.schemas import HealthResponse
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Import routers
+from app.routers import jobs, recommendations, users, rapidapi  # ✅ Make sure users is imported
+
 logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager for startup and shutdown events
-    """
+    """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting Job Recommendation API...")
+    logger.info("📊 Initializing database...")
     
     try:
-        # Initialize database
-        logger.info("📊 Initializing database...")
         await init_db()
         logger.info("✅ Database initialized")
-        
-        # Load ML model
-        logger.info("🤖 Loading ML model...")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        raise
+    
+    logger.info("🤖 Loading ML model...")
+    try:
         ml_service.load_model()
         logger.info("✅ ML model loaded")
-        
-        logger.info("✨ Application startup complete!")
-        
     except Exception as e:
-        logger.error(f"❌ Startup failed: {e}")
+        logger.error(f"❌ ML model loading failed: {e}")
         raise
+    
+    logger.info("✅ Application ready")
     
     yield
     
     # Shutdown
-    logger.info("👋 Shutting down...")
-    await close_db()
-    logger.info("✅ Shutdown complete")
+    logger.info("🛑 Shutting down...")
+    try:
+        await close_db()
+    except Exception as e:
+        logger.error(f"Shutdown error: {e}")
 
-
-# Create FastAPI application
+# Create FastAPI app
 app = FastAPI(
     title=settings.API_TITLE,
     version=settings.API_VERSION,
     description=settings.API_DESCRIPTION,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
 )
 
-# Configure CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],  # In production, specify exact origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(jobs.router)
-app.include_router(recommendations.router)
-app.include_router(users.router)
-app.include_router(rapidapi.router, prefix="/api/v1/rapidapi", tags=["rapidapi"])
+# Include routers - ✅ MAKE SURE THIS LINE EXISTS
+app.include_router(users.router, prefix="/api/v1", tags=["Users"])  # ✅ CRITICAL!
+app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
+app.include_router(recommendations.router, prefix="/api/v1", tags=["Recommendations"])
+app.include_router(rapidapi.router, prefix="/api/v1", tags=["RapidAPI"])
 
-
-@app.get("/", tags=["root"])
+@app.get("/")
 async def root():
     """Root endpoint"""
     return {
-        "message": "🚀 Job Recommendation API",
+        "message": "Job Recommendation API",
         "version": settings.API_VERSION,
         "docs": "/docs",
-        "health": "/health",
-        "status": "running"
     }
 
-
-@app.get("/health", response_model=HealthResponse, tags=["health"])
+@app.get("/health")
 async def health_check():
-    """
-    Health check endpoint
+    """Health check endpoint"""
+    status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
     
-    Returns the status of:
-    - API server
-    - Database connection
-    - ML model
-    """
+    # Check database
     try:
-        # Check database
-        from app.database import engine
-        async with engine.connect() as conn:
+        engine = get_engine()
+        async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
-        db_status = "connected"
+        status["database"] = "connected"
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
-        db_status = f"error: {str(e)}"
+        status["database"] = f"error: {str(e)}"
+        status["status"] = "degraded"
     
     # Check ML model
     try:
         if ml_service.model is not None:
-            ml_status = f"loaded ({settings.MODEL_NAME})"
+            status["ml_model"] = f"loaded ({settings.MODEL_NAME})"
         else:
-            ml_status = "not loaded"
+            status["ml_model"] = "not loaded"
+            status["status"] = "degraded"
     except Exception as e:
-        ml_status = f"error: {str(e)}"
+        logger.error(f"ML model health check failed: {e}")
+        status["ml_model"] = f"error: {str(e)}"
+        status["status"] = "degraded"
     
-    return HealthResponse(
-        status="healthy" if db_status == "connected" else "degraded",
-        version=settings.API_VERSION,
-        database=db_status,
-        ml_model=ml_status,
-        timestamp=datetime.utcnow()
-    )
-
+    return status
 
 if __name__ == "__main__":
     import uvicorn
-    
     uvicorn.run(
-        "app.main:app",
+        app,
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL
+        log_level=settings.LOG_LEVEL.lower(),
     )

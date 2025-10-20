@@ -24,7 +24,13 @@ class MLService:
         if self.model is None:
             logger.info(f"Loading ML model: {self.model_name}")
             try:
-                self.model = SentenceTransformer(self.model_name)
+                # Set HuggingFace token if available (needed for gated models)
+                model_kwargs = {}
+                if settings.HUGGINGFACE_TOKEN:
+                    logger.info("Using HuggingFace token for authentication")
+                    model_kwargs['token'] = settings.HUGGINGFACE_TOKEN
+                
+                self.model = SentenceTransformer(self.model_name, **model_kwargs)
                 logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
             except Exception as e:
                 logger.error(f"Failed to load model: {e}")

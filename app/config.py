@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     MODEL_NAME: str = "google/embeddinggemma-300m"
     EMBEDDING_DIMENSION: int = 768
     BATCH_SIZE: int = 32
+    HUGGINGFACE_TOKEN: Optional[str] = None
     
     # RapidAPI (Optional)
     RAPIDAPI_KEY: Optional[str] = None

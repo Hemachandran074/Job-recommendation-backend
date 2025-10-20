@@ -41,6 +41,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+def get_engine():
+    """Get the database engine"""
+    return engine
+
+
 async def init_db():
     """Initialize database (create tables, extensions)"""
     try:

@@ -23,9 +23,14 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # ML Model
-    MODEL_NAME: str = "google/embeddinggemma-300m"
-    EMBEDDING_DIMENSION: int = 768
+    # ML Model Configuration
+    # Supported models:
+    # - BAAI/bge-m3 (1024 dims, 567MB, multilingual, no approval needed)
+    # - sentence-transformers/all-mpnet-base-v2 (768 dims, 420MB, no approval needed)
+    # - sentence-transformers/all-MiniLM-L6-v2 (384 dims, 22MB, no approval needed)
+    # - google/embeddinggemma-300m (768 dims, 300MB, requires HuggingFace approval)
+    MODEL_NAME: str = "BAAI/bge-m3"
+    EMBEDDING_DIMENSION: int = 1024
     BATCH_SIZE: int = 32
     HUGGINGFACE_TOKEN: Optional[str] = None
     

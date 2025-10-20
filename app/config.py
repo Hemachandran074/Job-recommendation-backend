@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # ML Model
-    MODEL_NAME: str = "sentence-transformers/embedding-gemma"
+    MODEL_NAME: str = "google/embeddinggemma-300m"
     EMBEDDING_DIMENSION: int = 768
     BATCH_SIZE: int = 32
     

@@ -27,12 +27,37 @@ class RapidAPIService:
         """Check if RapidAPI is properly configured"""
         return self.api_key is not None and self.api_key != ""
     
-    async def fetch_jobs(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def fetch_jobs(
+        self, 
+        limit: Optional[int] = None,
+        title_filter: Optional[str] = None,
+        advanced_title_filter: Optional[str] = None,
+        location_filter: Optional[str] = None,
+        description_filter: Optional[str] = None,
+        description_type: Optional[str] = None,
+        remote: Optional[bool] = None,
+        agency: Optional[bool] = None,
+        offset: Optional[int] = None,
+        date_filter: Optional[str] = None,
+        include_ai: Optional[bool] = None,
+        ai_work_arrangement_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Fetch jobs from RapidAPI
+        Fetch jobs from RapidAPI with advanced filtering
         
         Args:
-            limit: Maximum number of jobs to fetch (optional)
+            limit: Maximum number of jobs to fetch
+            title_filter: Filter by job title
+            advanced_title_filter: Advanced title filtering
+            location_filter: Filter by location
+            description_filter: Filter by description
+            description_type: Type of description filter
+            remote: Include remote jobs (True/False/None)
+            agency: Include agency jobs (True/False/None)
+            offset: Pagination offset
+            date_filter: Filter by date
+            include_ai: Include AI jobs (True/False/None)
+            ai_work_arrangement_filter: AI work arrangement filter
             
         Returns:
             List of job dictionaries
@@ -42,11 +67,39 @@ class RapidAPIService:
             return []
         
         try:
+            # Build query parameters
+            params = {}
+            
+            # Add optional parameters only if provided
+            if title_filter:
+                params["title_filter"] = title_filter
+            if advanced_title_filter:
+                params["advanced_title_filter"] = advanced_title_filter
+            if location_filter:
+                params["location_filter"] = location_filter
+            if description_filter:
+                params["description_filter"] = description_filter
+            if description_type:
+                params["description_type"] = description_type
+            if remote is not None:
+                params["remote"] = remote
+            if agency is not None:
+                params["agency"] = agency
+            if offset is not None:
+                params["offset"] = offset
+            if date_filter:
+                params["date_filter"] = date_filter
+            if include_ai is not None:
+                params["include_ai"] = include_ai
+            if ai_work_arrangement_filter:
+                params["ai_work_arrangement_filter"] = ai_work_arrangement_filter
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
-                logger.info(f"Fetching jobs from RapidAPI: {self.jobs_url}")
+                logger.info(f"Fetching jobs from RapidAPI with filters: {params}")
                 response = await client.get(
                     self.jobs_url,
-                    headers=self.headers
+                    headers=self.headers,
+                    params=params  # ✅ Send query parameters
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -67,12 +120,37 @@ class RapidAPIService:
             logger.error(f"Error fetching jobs from RapidAPI: {str(e)}")
             return []
     
-    async def fetch_internships(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def fetch_internships(
+        self, 
+        limit: Optional[int] = None,
+        title_filter: Optional[str] = None,
+        advanced_title_filter: Optional[str] = None,
+        location_filter: Optional[str] = None,
+        description_filter: Optional[str] = None,
+        description_type: Optional[str] = None,
+        remote: Optional[bool] = None,
+        agency: Optional[bool] = None,
+        offset: Optional[int] = None,
+        date_filter: Optional[str] = None,
+        include_ai: Optional[bool] = None,
+        ai_work_arrangement_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Fetch internships from RapidAPI
+        Fetch internships from RapidAPI with advanced filtering
         
         Args:
-            limit: Maximum number of internships to fetch (optional)
+            limit: Maximum number of internships to fetch
+            title_filter: Filter by internship title
+            advanced_title_filter: Advanced title filtering
+            location_filter: Filter by location
+            description_filter: Filter by description
+            description_type: Type of description filter
+            remote: Include remote internships (True/False/None)
+            agency: Include agency internships (True/False/None)
+            offset: Pagination offset
+            date_filter: Filter by date
+            include_ai: Include AI internships (True/False/None)
+            ai_work_arrangement_filter: AI work arrangement filter
             
         Returns:
             List of internship dictionaries
@@ -82,11 +160,39 @@ class RapidAPIService:
             return []
         
         try:
+            # Build query parameters
+            params = {}
+            
+            # Add optional parameters only if provided
+            if title_filter:
+                params["title_filter"] = title_filter
+            if advanced_title_filter:
+                params["advanced_title_filter"] = advanced_title_filter
+            if location_filter:
+                params["location_filter"] = location_filter
+            if description_filter:
+                params["description_filter"] = description_filter
+            if description_type:
+                params["description_type"] = description_type
+            if remote is not None:
+                params["remote"] = remote
+            if agency is not None:
+                params["agency"] = agency
+            if offset is not None:
+                params["offset"] = offset
+            if date_filter:
+                params["date_filter"] = date_filter
+            if include_ai is not None:
+                params["include_ai"] = include_ai
+            if ai_work_arrangement_filter:
+                params["ai_work_arrangement_filter"] = ai_work_arrangement_filter
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
-                logger.info(f"Fetching internships from RapidAPI: {self.internships_url}")
+                logger.info(f"Fetching internships from RapidAPI with filters: {params}")
                 response = await client.get(
                     self.internships_url,
-                    headers=self.headers
+                    headers=self.headers,
+                    params=params  # ✅ Send query parameters
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -107,20 +213,71 @@ class RapidAPIService:
             logger.error(f"Error fetching internships from RapidAPI: {str(e)}")
             return []
     
-    async def fetch_all(self, jobs_limit: Optional[int] = None, 
-                       internships_limit: Optional[int] = None) -> Dict[str, List[Dict[str, Any]]]:
+    async def fetch_all(
+        self, 
+        jobs_limit: Optional[int] = None, 
+        internships_limit: Optional[int] = None,
+        title_filter: Optional[str] = None,
+        advanced_title_filter: Optional[str] = None,
+        location_filter: Optional[str] = None,
+        description_filter: Optional[str] = None,
+        description_type: Optional[str] = None,
+        remote: Optional[bool] = None,
+        agency: Optional[bool] = None,
+        offset: Optional[int] = None,
+        date_filter: Optional[str] = None,
+        include_ai: Optional[bool] = None,
+        ai_work_arrangement_filter: Optional[str] = None,
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Fetch both jobs and internships
+        Fetch both jobs and internships with optional filtering
         
         Args:
             jobs_limit: Maximum number of jobs to fetch
             internships_limit: Maximum number of internships to fetch
+            title_filter: Filter by title
+            advanced_title_filter: Advanced title filtering
+            location_filter: Filter by location
+            description_filter: Filter by description
+            description_type: Type of description filter
+            remote: Include remote positions
+            agency: Include agency positions
+            offset: Pagination offset
+            date_filter: Filter by date
+            include_ai: Include AI positions
+            ai_work_arrangement_filter: AI work arrangement filter
             
         Returns:
             Dictionary with 'jobs' and 'internships' keys
         """
-        jobs = await self.fetch_jobs(limit=jobs_limit)
-        internships = await self.fetch_internships(limit=internships_limit)
+        jobs = await self.fetch_jobs(
+            limit=jobs_limit,
+            title_filter=title_filter,
+            advanced_title_filter=advanced_title_filter,
+            location_filter=location_filter,
+            description_filter=description_filter,
+            description_type=description_type,
+            remote=remote,
+            agency=agency,
+            offset=offset,
+            date_filter=date_filter,
+            include_ai=include_ai,
+            ai_work_arrangement_filter=ai_work_arrangement_filter,
+        )
+        internships = await self.fetch_internships(
+            limit=internships_limit,
+            title_filter=title_filter,
+            advanced_title_filter=advanced_title_filter,
+            location_filter=location_filter,
+            description_filter=description_filter,
+            description_type=description_type,
+            remote=remote,
+            agency=agency,
+            offset=offset,
+            date_filter=date_filter,
+            include_ai=include_ai,
+            ai_work_arrangement_filter=ai_work_arrangement_filter,
+        )
         
         return {
             "jobs": jobs,

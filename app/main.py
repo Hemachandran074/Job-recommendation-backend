@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime
 import logging
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import init_db, close_db
@@ -107,7 +108,7 @@ async def health_check():
         # Check database
         from app.database import engine
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
         logger.error(f"Database health check failed: {e}")

@@ -85,6 +85,12 @@ class UserResponse(UserBase):
     experience_years: Optional[int] = None
     preferred_job_type: Optional[str] = None
     preferred_locations: Optional[List[str]] = None
+    location: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    portfolio: Optional[str] = None
     is_active: bool
     is_verified: bool
     created_at: datetime

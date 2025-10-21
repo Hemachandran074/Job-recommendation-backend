@@ -24,14 +24,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # ML Model Configuration
-    # Supported models:
+    # ML Model Options:
+    # - Google text-embedding-004 (768 dims, via API - RECOMMENDED)
     # - BAAI/bge-m3 (1024 dims, 567MB, multilingual, no approval needed)
     # - sentence-transformers/all-mpnet-base-v2 (768 dims, 420MB, no approval needed)
     # - sentence-transformers/all-MiniLM-L6-v2 (384 dims, 22MB, no approval needed)
     # - google/embeddinggemma-300m (768 dims, 300MB, requires HuggingFace approval)
-    MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_DIMENSION: int = 384
+    MODEL_NAME: str = "text-embedding-004"  # Google's embedding model via API
+    EMBEDDING_DIMENSION: int = 768  # Google's model uses 768 dimensions
     BATCH_SIZE: int = 32
+    EMBEDDING_API: Optional[str] = None  # Google Generative AI API Key
     HUGGINGFACE_TOKEN: Optional[str] = None
     
     # RapidAPI (Optional)

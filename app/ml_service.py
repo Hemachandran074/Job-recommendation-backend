@@ -1,44 +1,46 @@
 """
-Machine Learning service for generating embeddings
+Machine Learning service for generating embeddings using Google Generative AI
 """
 from typing import List, Union
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from app.config import settings
 import logging
+import google.generativeai as genai
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class MLService:
-    """Service for generating text embeddings"""
+    """Service for generating text embeddings using Google's API"""
     
     def __init__(self):
-        """Initialize the ML model"""
+        """Initialize the ML service"""
         self.model = None
         self.model_name = settings.MODEL_NAME
         self.embedding_dim = settings.EMBEDDING_DIMENSION
+        self.api_configured = False
         
     def load_model(self):
-        """Load the sentence transformer model"""
-        if self.model is None:
-            logger.info(f"Loading ML model: {self.model_name}")
+        """Configure Google Generative AI API"""
+        if not self.api_configured:
+            logger.info(f"Configuring Google Generative AI API")
             try:
-                # Set HuggingFace token if available (needed for gated models)
-                model_kwargs = {}
-                if settings.HUGGINGFACE_TOKEN:
-                    logger.info("Using HuggingFace token for authentication")
-                    model_kwargs['token'] = settings.HUGGINGFACE_TOKEN
+                # Configure the API key
+                if not settings.EMBEDDING_API:
+                    raise ValueError("EMBEDDING_API key not found in settings")
                 
-                self.model = SentenceTransformer(self.model_name, **model_kwargs)
-                logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
+                genai.configure(api_key=settings.EMBEDDING_API)
+                self.api_configured = True
+                self.model = "models/text-embedding-004"  # Google's latest embedding model (768 dims)
+                
+                logger.info(f"✅ Google AI API configured. Using model: {self.model}")
+                logger.info(f"Embedding dimension: {self.embedding_dim}")
             except Exception as e:
-                logger.error(f"Failed to load model: {e}")
+                logger.error(f"Failed to configure Google AI API: {e}")
                 raise
     
     def generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding for a single text
+        Generate embedding for a single text using Google's API
         
         Args:
             text: Input text
@@ -46,17 +48,24 @@ class MLService:
         Returns:
             List of float values representing the embedding
         """
-        if self.model is None:
+        if not self.api_configured:
             self.load_model()
         
         try:
-            # Generate embedding
-            embedding = self.model.encode(text, convert_to_numpy=True)
+            # Generate embedding using Google's API
+            result = genai.embed_content(
+                model=self.model,
+                content=text,
+                task_type="retrieval_document"  # For storing/indexing
+            )
             
-            # Normalize the embedding (important for cosine similarity)
-            embedding = embedding / np.linalg.norm(embedding)
+            embedding = result['embedding']
             
-            return embedding.tolist()
+            # Ensure correct dimension
+            if len(embedding) != self.embedding_dim:
+                logger.warning(f"Embedding dimension mismatch: got {len(embedding)}, expected {self.embedding_dim}")
+            
+            return embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
             raise
@@ -71,23 +80,27 @@ class MLService:
         Returns:
             List of embeddings
         """
-        if self.model is None:
+        if not self.api_configured:
             self.load_model()
         
         try:
-            # Generate embeddings in batch
-            embeddings = self.model.encode(
-                texts,
-                batch_size=settings.BATCH_SIZE,
-                convert_to_numpy=True,
-                show_progress_bar=False
-            )
+            # Google's API supports batch embedding
+            embeddings = []
             
-            # Normalize embeddings
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            embeddings = embeddings / norms
+            # Process in batches to avoid rate limits
+            batch_size = 10  # Adjust based on API limits
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                
+                for text in batch:
+                    result = genai.embed_content(
+                        model=self.model,
+                        content=text,
+                        task_type="retrieval_document"
+                    )
+                    embeddings.append(result['embedding'])
             
-            return embeddings.tolist()
+            return embeddings
         except Exception as e:
             logger.error(f"Error generating batch embeddings: {e}")
             raise

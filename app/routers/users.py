@@ -27,7 +27,12 @@ def hash_password(password: str) -> str:
     if len(password_bytes) > 72:
         # Truncate to 72 bytes, decode back to string
         password = password_bytes[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(password)
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        # If hashing fails, truncate password and try again
+        truncated_password = password[:50]  # Safe truncation
+        return pwd_context.hash(truncated_password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password"""

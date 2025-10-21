@@ -22,16 +22,19 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     """Hash a password - FIXED to handle bcrypt 72 byte limit"""
-    # Bcrypt has a 72 byte limit, so we truncate if needed
-    if len(password.encode('utf-8')) > 72:
-        password = password[:72]
+    # Bcrypt has a 72 byte limit, so we truncate by BYTES if needed
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        # Truncate to 72 bytes, decode back to string
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password"""
-    # Truncate to match hashing behavior
-    if len(plain_password.encode('utf-8')) > 72:
-        plain_password = plain_password[:72]
+    # Truncate by BYTES to match hashing behavior
+    password_bytes = plain_password.encode('utf-8')
+    if len(password_bytes) > 72:
+        plain_password = password_bytes[:72].decode('utf-8', errors='ignore')
     return pwd_context.verify(plain_password, hashed_password)
 
 @router.post("/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

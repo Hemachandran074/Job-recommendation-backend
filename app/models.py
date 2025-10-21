@@ -54,6 +54,14 @@ class User(Base):
     preferred_locations = Column(JSON, nullable=True)
     resume_text = Column(Text, nullable=True)
     
+    # Additional profile fields
+    location = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    bio = Column(Text, nullable=True)
+    linkedin = Column(String(255), nullable=True)
+    github = Column(String(255), nullable=True)
+    portfolio = Column(String(255), nullable=True)
+    
     # Vector embedding for user profile/resume
     resume_embedding = Column(Vector(settings.EMBEDDING_DIMENSION), nullable=True)
     

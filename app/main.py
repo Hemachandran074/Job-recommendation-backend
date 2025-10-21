@@ -17,6 +17,26 @@ from app.routers import jobs, recommendations, users, rapidapi  # ✅ Make sure 
 
 logger = logging.getLogger(__name__)
 
+async def fix_database_schema():
+    """Fix database schema by adding missing columns"""
+    try:
+        engine = get_engine()
+        async with engine.begin() as conn:
+            # Add missing columns
+            await conn.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS location VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS bio TEXT,
+                ADD COLUMN IF NOT EXISTS linkedin VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS github VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS portfolio VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS resume_embedding vector(768)
+            """))
+            logger.info("✅ Database schema fixed")
+    except Exception as e:
+        logger.warning(f"⚠️  Schema fix skipped: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -27,6 +47,10 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         logger.info("✅ Database initialized")
+        
+        # Fix database schema
+        await fix_database_schema()
+        
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise

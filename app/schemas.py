@@ -68,6 +68,10 @@ class UserCreate(UserBase):
     resume_text: Optional[str] = None
     location: Optional[str] = None
     phone: Optional[str] = None
+    bio: Optional[str] = None
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    portfolio: Optional[str] = None
 
 
 class UserUpdate(BaseModel):

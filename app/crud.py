@@ -189,9 +189,11 @@ async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
     # Hash password if provided
     hashed_password = None
     if user_data.password:
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        hashed_password = pwd_context.hash(user_data.password)
+        import bcrypt
+        password_bytes = user_data.password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        hashed_password = hashed.decode('utf-8')
     
     # Create user object
     db_user = User(

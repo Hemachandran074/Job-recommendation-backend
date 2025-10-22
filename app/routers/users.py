@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from passlib.context import CryptContext
+import bcrypt
 
 from app.database import get_db
 from app.models import User, Job
@@ -17,30 +17,21 @@ from app.auth import create_access_token, get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    """Hash a password - FIXED to handle bcrypt 72 byte limit"""
-    # Bcrypt has a 72 byte limit, so we truncate by BYTES if needed
+    """Hash a password using bcrypt (handles 72 byte limit automatically)"""
+    # Convert password to bytes
     password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        # Truncate to 72 bytes, decode back to string
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
-    try:
-        return pwd_context.hash(password)
-    except Exception as e:
-        # If hashing fails, truncate password and try again
-        truncated_password = password[:50]  # Safe truncation
-        return pwd_context.hash(truncated_password)
+    # bcrypt automatically handles the 72 byte limit
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password"""
-    # Truncate by BYTES to match hashing behavior
+    # Convert to bytes
     password_bytes = plain_password.encode('utf-8')
-    if len(password_bytes) > 72:
-        plain_password = password_bytes[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(plain_password, hashed_password)
+    hash_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hash_bytes)
 
 @router.post("/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):

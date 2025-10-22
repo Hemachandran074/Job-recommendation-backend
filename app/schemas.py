@@ -60,12 +60,14 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for user registration"""
-    password: Optional[str] = Field(None, min_length=8, max_length=100)
+    password: str = Field(..., min_length=6, max_length=100)  # Required, min 6 chars
     skills: Optional[List[str]] = None
     experience_years: Optional[int] = Field(None, ge=0, le=50)
     preferred_job_type: Optional[str] = None
     preferred_locations: Optional[List[str]] = None
     resume_text: Optional[str] = None
+    location: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class UserUpdate(BaseModel):

@@ -33,17 +33,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     hash_bytes = hashed_password.encode('utf-8')
     return bcrypt.checkpw(password_bytes, hash_bytes)
 
-@router.post("/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/users/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """
-    Register a new user
+    Register a new user and return access token
     
     Creates a user account with:
     - Basic info (name, email)
-    - Optional password (for future authentication)
+    - Password (required)
     - Optional profile data (skills, experience, resume)
     
-    If profile data is provided, generates an embedding for personalized recommendations
+    Returns: User data + JWT access token for immediate login
     """
     try:
         logger.info(f"Registration attempt for email: {user_data.email}")
@@ -86,8 +86,23 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
         await db.commit()
         await db.refresh(new_user)
         
+        # Create access token for immediate login
+        access_token = create_access_token(
+            data={"sub": new_user.email, "user_id": str(new_user.id)}
+        )
+        
         logger.info(f"✅ User registered successfully: {new_user.email}")
-        return new_user
+        
+        # Return user data + token
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": str(new_user.id),
+                "name": new_user.name,
+                "email": new_user.email
+            }
+        }
         
     except HTTPException:
         raise

@@ -57,6 +57,10 @@ class UserBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
 
+class UserLogin(BaseModel):
+    """Schema for user login"""
+    email: EmailStr
+    password: str
 
 class UserCreate(UserBase):
     """Schema for user registration"""

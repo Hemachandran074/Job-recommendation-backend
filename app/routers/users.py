@@ -10,7 +10,7 @@ import bcrypt
 
 from app.database import get_db
 from app.models import User, Job
-from app.schemas import UserCreate, UserUpdate, UserResponse, Token
+from app.schemas import UserCreate, UserLogin, UserUpdate, UserResponse, Token
 from app.ml_service import ml_service
 from app.auth import create_access_token, get_current_user
 
@@ -115,7 +115,7 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
         )
 
 @router.post("/users/login", response_model=Token)
-async def login_user(credentials: UserCreate, db: AsyncSession = Depends(get_db)):
+async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     """
     Login user and return JWT token
     

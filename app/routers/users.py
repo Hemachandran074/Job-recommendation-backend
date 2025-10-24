@@ -101,7 +101,7 @@ async def login_for_access_token(
             detail="Login failed. Please try again."
         )
 
-@router.post("/users/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """
     Register a new user and return access token
@@ -182,7 +182,7 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
             detail=f"Failed to register user: {str(e)}"
         )
 
-@router.post("/users/login", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_user(credentials: UserCreate, db: AsyncSession = Depends(get_db)):
     """
     Login user and return JWT token
@@ -238,7 +238,7 @@ async def login_user(credentials: UserCreate, db: AsyncSession = Depends(get_db)
             detail=f"Login failed: {str(e)}"
         )
 
-@router.get("/users/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
@@ -268,7 +268,7 @@ async def get_user(
             detail="Failed to fetch user"
         )
 
-@router.put("/users/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: str,
     user_update: UserUpdate,
@@ -306,7 +306,7 @@ async def update_user(
             detail="Failed to update user"
         )
 
-@router.post("/users/{user_id}/generate-resume-embedding")
+@router.post("/{user_id}/generate-resume-embedding")
 async def generate_resume_embedding(
     user_id: str,
     resume_data: dict,

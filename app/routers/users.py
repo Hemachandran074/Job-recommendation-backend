@@ -4,34 +4,102 @@ User management endpoints
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from datetime import datetime, timedelta
 import bcrypt
 
 from app.database import get_db
 from app.models import User, Job
 from app.schemas import UserCreate, UserUpdate, UserResponse, Token
 from app.ml_service import ml_service
-from app.auth import create_access_token, get_current_user
+from app.auth import create_access_token, get_current_user, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 router = APIRouter()
 
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt (handles 72 byte limit automatically)"""
-    # Convert password to bytes
-    password_bytes = password.encode('utf-8')
-    # bcrypt automatically handles the 72 byte limit
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password"""
-    # Convert to bytes
-    password_bytes = plain_password.encode('utf-8')
-    hash_bytes = hashed_password.encode('utf-8')
-    return bcrypt.checkpw(password_bytes, hash_bytes)
+@router.post("/token", response_model=Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    OAuth2 compatible token login endpoint
+    
+    Parameters:
+    - username: User's email address
+    - password: User's password
+    
+    Returns:
+    - access_token: JWT token for authentication
+    - token_type: "bearer"
+    - user: User information
+    """
+    try:
+        logger.info(f"🔐 Login attempt for: {form_data.username}")
+        
+        # Find user by email (username field contains email in OAuth2)
+        result = await db.execute(
+            select(User).where(User.email == form_data.username)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            logger.warning(f"❌ User not found: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Verify password
+        if not verify_password(form_data.password, user.hashed_password):
+            logger.warning(f"❌ Invalid password for: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Check if user is active
+        if not user.is_active:
+            logger.warning(f"❌ Inactive user attempted login: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive"
+            )
+        
+        # Create access token
+        access_token_expires = timedelta(days=30)  # Token valid for 30 days
+        access_token = create_access_token(
+            data={"sub": user.email, "user_id": str(user.id)},
+            expires_delta=access_token_expires
+        )
+        
+        logger.info(f"✅ User logged in successfully: {user.email}")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Login error: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed. Please try again."
+        )
 
 @router.post("/users/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -68,7 +136,7 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
                 detail="Password must be at least 6 characters long"
             )
         
-        # Create new user
+        # Create new user WITHOUT generating embedding (too slow for registration)
         new_user = User(
             email=user_data.email,
             name=user_data.name,

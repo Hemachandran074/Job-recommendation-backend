@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models import User, Job
 from app.schemas import UserCreate, UserUpdate, UserResponse, Token
 from app.ml_service import ml_service
-from app.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.auth import create_access_token, get_current_user, get_password_hash, verify_password
 
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -140,7 +140,7 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
         new_user = User(
             email=user_data.email,
             name=user_data.name,
-            hashed_password=hash_password(user_data.password),
+            hashed_password=get_password_hash(user_data.password),
             skills=user_data.skills or [],
             location=user_data.location or "",
             phone=user_data.phone or "",

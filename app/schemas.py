@@ -134,10 +134,18 @@ class RecommendationResponse(BaseModel):
 
 # ============= Authentication Schemas =============
 
+class UserInToken(BaseModel):
+    """User info included in token response"""
+    id: str
+    email: str
+    name: str
+
+
 class Token(BaseModel):
     """Token response schema"""
     access_token: str
     token_type: str = "bearer"
+    user: UserInToken  # ✅ ADDED: Include user info in token response
 
 
 class TokenData(BaseModel):

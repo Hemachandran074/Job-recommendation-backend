@@ -1,122 +1,139 @@
 """
-Job management endpoints
+Jobs Router
+Endpoints for job listings and searches
 """
-from typing import List, Optional
-from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
-from app.schemas import JobCreate, JobResponse, JobIngest
-from app import crud
+from sqlalchemy import select, and_, desc
+from typing import List, Optional
 import logging
+from datetime import datetime, timedelta
+
+from app.database import get_db
+from app.models import Job
+from app.schemas import JobResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+router = APIRouter()
 
 
-@router.post("/ingest", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
-async def ingest_job(
-    job_data: JobIngest,
+@router.get("/recent")
+async def get_recent_jobs(
+    limit: int = Query(10, ge=1, le=100),
+    days: int = Query(7, ge=1, le=30),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Ingest a job from external sources (RapidAPI, manual upload, etc.)
+    Get recently posted jobs (last N days)
     
-    This endpoint:
-    1. Accepts job data
-    2. Generates ML embedding from job description
-    3. Stores job with embedding in database
-    
-    Returns the created job with its ID
+    Parameters:
+    - limit: Maximum number of jobs to return (1-100)
+    - days: Number of days to look back (1-30, default: 7)
     """
     try:
-        # Convert to JobCreate (removes external_id)
-        job_create = JobCreate(**job_data.model_dump(exclude={"external_id"}))
+        # Calculate cutoff date
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
         
-        # Create job with embedding
-        job = await crud.create_job(db, job_create)
+        # Query recent jobs
+        result = await db.execute(
+            select(Job)
+            .where(Job.posted_date >= cutoff_date)
+            .order_by(desc(Job.posted_date))
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
         
-        return job
+        logger.info(f"✅ Found {len(jobs)} recent jobs (last {days} days)")
+        
+        return [{
+            "id": str(job.id),
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "job_type": job.job_type,
+            "remote": job.remote,
+            "description": job.description,
+            "skills": job.skills,
+            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+            "url": job.url,
+        } for job in jobs]
+        
     except Exception as e:
-        logger.error(f"Error ingesting job: {e}")
+        logger.error(f"❌ Error fetching recent jobs: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to ingest job: {str(e)}"
+            status_code=500,
+            detail=f"Failed to fetch recent jobs: {str(e)}"
         )
 
 
-@router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
-async def create_job(
-    job_data: JobCreate,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Create a new job listing
-    
-    Similar to /ingest but for manual job creation
-    """
-    try:
-        job = await crud.create_job(db, job_data)
-        return job
-    except Exception as e:
-        logger.error(f"Error creating job: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create job: {str(e)}"
-        )
-
-
-@router.get("/{job_id}", response_model=JobResponse)
-async def get_job(
-    job_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific job by ID"""
-    job = await crud.get_job(db, job_id)
-    
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
-    return job
-
-
-@router.get("/", response_model=List[JobResponse])
-async def list_jobs(
+@router.get("/all")
+async def get_all_jobs(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    job_type: Optional[str] = Query(None),
-    location: Optional[str] = Query(None),
-    remote_only: bool = Query(False),
+    limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    List jobs with optional filters
-    
-    Query parameters:
-    - skip: Number of jobs to skip (pagination)
-    - limit: Maximum number of jobs to return
-    - job_type: Filter by job type (full-time, part-time, internship)
-    - location: Filter by location (partial match)
-    - remote_only: Only return remote jobs
+    Get all jobs with pagination
     """
-    jobs = await crud.get_jobs(
-        db,
-        skip=skip,
-        limit=limit,
-        job_type=job_type,
-        location=location,
-        remote_only=remote_only
-    )
-    
-    return jobs
+    try:
+        result = await db.execute(
+            select(Job)
+            .order_by(desc(Job.posted_date))
+            .offset(skip)
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
+        
+        return [{
+            "id": str(job.id),
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "job_type": job.job_type,
+            "remote": job.remote,
+            "description": job.description,
+            "skills": job.skills,
+            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+        } for job in jobs]
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/count/total")
-async def get_job_count(db: AsyncSession = Depends(get_db)):
-    """Get total number of jobs in database"""
-    count = await crud.get_job_count(db)
-    return {"total_jobs": count}
+@router.get("/{job_id}")
+async def get_job_by_id(
+    job_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get a specific job by ID
+    """
+    try:
+        result = await db.execute(
+            select(Job).where(Job.id == job_id)
+        )
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        return {
+            "id": str(job.id),
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "job_type": job.job_type,
+            "remote": job.remote,
+            "description": job.description,
+            "skills": job.skills,
+            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+            "url": job.url,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error fetching job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

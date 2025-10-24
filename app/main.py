@@ -92,9 +92,9 @@ app.add_middleware(
 )
 
 # Include routers - ✅ MAKE SURE THIS LINE EXISTS
-app.include_router(users.router, prefix="/api/v1", tags=["Users"])  # ✅ CRITICAL!
-app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
-app.include_router(recommendations.router, prefix="/api/v1", tags=["Recommendations"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])  # ✅ CRITICAL!
+app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
+app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
 app.include_router(rapidapi.router, prefix="/api/v1", tags=["RapidAPI"])
 
 @app.get("/")

@@ -1,149 +1,131 @@
 """
-Job recommendation endpoints
+Recommendations Router
+Endpoints for getting personalized job recommendations
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
-from app.schemas import RecommendationQuery, RecommendationResponse, JobWithScore
-from app.ml_service import ml_service
-from app import crud
+from sqlalchemy import select, and_
+from typing import List
 import logging
+from datetime import datetime, timedelta
+
+from app.database import get_db
+from app.models import User, Job
+from app.ml_service import ml_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
+router = APIRouter()
 
 
-@router.post("/", response_model=RecommendationResponse)
-async def get_recommendations(
-    query: RecommendationQuery,
+@router.get("/{user_id}")
+async def get_recommendations_for_user(
+    user_id: str,
+    limit: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get job recommendations based on query or user profile
-    
-    This is the core recommendation endpoint that:
-    1. Takes either a text query or user_id
-    2. Generates embedding from query or retrieves user's profile embedding
-    3. Performs vector similarity search in database
-    4. Returns top N most similar jobs
-    
-    Parameters:
-    - query: Text query for job search (optional if user_id provided)
-    - user_id: User ID for personalized recommendations (optional if query provided)
-    - limit: Number of recommendations to return (default: 10, max: 100)
-    - min_score: Minimum similarity score threshold (0-1, default: 0.5)
-    - job_type: Filter by job type
-    - location: Filter by location
-    - remote_only: Only return remote jobs
-    
-    Returns:
-    - jobs: List of jobs with similarity scores
-    - total: Number of results returned
-    - query_used: The text query that was used for search
+    Get personalized job recommendations for a user based on their skills
     """
     try:
-        query_embedding = None
-        query_text = None
-        
-        # Case 1: Text query provided
-        if query.query:
-            logger.info(f"Generating recommendations for query: {query.query}")
-            query_text = query.query
-            query_embedding = ml_service.generate_embedding(query.query)
-        
-        # Case 2: User ID provided
-        elif query.user_id:
-            logger.info(f"Generating recommendations for user: {query.user_id}")
-            user = await crud.get_user_by_id(db, query.user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            if not user.resume_embedding:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="User has no profile embedding. Please update user profile first."
-                )
-            
-            query_embedding = user.resume_embedding
-            
-            # Create query text for display
-            query_text = ml_service.create_user_profile_text({
-                'skills': user.skills,
-                'experience_years': user.experience_years,
-                'preferred_job_type': user.preferred_job_type,
-                'preferred_locations': user.preferred_locations
-            })
-        
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either 'query' or 'user_id' must be provided"
-            )
-        
-        # Perform vector similarity search
-        jobs_with_scores = await crud.search_jobs_by_similarity(
-            db=db,
-            query_embedding=query_embedding,
-            limit=query.limit,
-            min_score=query.min_score,
-            job_type=query.job_type,
-            location=query.location,
-            remote_only=query.remote_only
+        # Get user
+        result = await db.execute(
+            select(User).where(User.id == user_id)
         )
+        user = result.scalar_one_or_none()
         
-        # Convert to response format
-        job_responses = []
-        for job, score in jobs_with_scores:
-            job_dict = {
-                "id": job.id,
-                "title": job.title,
-                "company": job.company,
-                "location": job.location,
-                "description": job.description,
-                "skills": job.skills,
-                "salary_min": job.salary_min,
-                "salary_max": job.salary_max,
-                "job_type": job.job_type,
-                "experience_level": job.experience_level,
-                "remote": job.remote,
-                "url": job.url,
-                "source": job.source,
-                "created_at": job.created_at,
-                "updated_at": job.updated_at,
-                "similarity_score": score
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if not user.skills or len(user.skills) == 0:
+            # No skills, return empty recommendations
+            return {
+                "user_id": user_id,
+                "recommendations": [],
+                "message": "No skills found. Please complete your profile."
             }
-            job_responses.append(JobWithScore(**job_dict))
         
-        logger.info(f"Found {len(job_responses)} recommendations")
+        # Get all jobs
+        result = await db.execute(select(Job))
+        all_jobs = result.scalars().all()
         
-        return RecommendationResponse(
-            jobs=job_responses,
-            total=len(job_responses),
-            query_used=query_text[:100] if query_text else None  # Truncate for response
-        )
-    
+        if not all_jobs:
+            return {
+                "user_id": user_id,
+                "recommendations": [],
+                "message": "No jobs available in database"
+            }
+        
+        # Score and rank jobs
+        scored_jobs = []
+        user_skills_lower = [s.lower() for s in user.skills]
+        user_location = user.location.lower() if user.location else ""
+        
+        for job in all_jobs:
+            score = 0
+            match_reasons = []
+            
+            # Skill matching (most important)
+            job_skills_lower = [s.lower() for s in (job.skills or [])]
+            matching_skills = set(user_skills_lower) & set(job_skills_lower)
+            
+            if matching_skills:
+                score += len(matching_skills) * 20
+                match_reasons.append(f"Matches your skills: {', '.join(matching_skills)}")
+            
+            # Location matching
+            if user_location and job.location:
+                if user_location in job.location.lower():
+                    score += 30
+                    match_reasons.append(f"Location match: {job.location}")
+            
+            # Recent jobs bonus
+            if job.posted_date:
+                days_old = (datetime.utcnow() - job.posted_date).days
+                if days_old <= 7:
+                    score += 10
+                    match_reasons.append("Recently posted")
+            
+            # Remote jobs bonus
+            if job.remote:
+                score += 5
+                match_reasons.append("Remote position")
+            
+            if score > 0:
+                scored_jobs.append({
+                    "job": {
+                        "id": str(job.id),
+                        "title": job.title,
+                        "company": job.company,
+                        "location": job.location,
+                        "job_type": job.job_type,
+                        "remote": job.remote,
+                        "description": job.description,
+                        "skills": job.skills,
+                        "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+                    },
+                    "match_score": score,
+                    "match_reasons": match_reasons
+                })
+        
+        # Sort by score and return top N
+        scored_jobs.sort(key=lambda x: x["match_score"], reverse=True)
+        top_recommendations = scored_jobs[:limit]
+        
+        logger.info(f"✅ Generated {len(top_recommendations)} recommendations for user {user_id}")
+        
+        return {
+            "user_id": user_id,
+            "user_skills": user.skills,
+            "recommendations": top_recommendations,
+            "total_matches": len(scored_jobs)
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating recommendations: {e}")
+        logger.error(f"❌ Error generating recommendations: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail=f"Failed to generate recommendations: {str(e)}"
         )
-
-
-@router.get("/test")
-async def test_recommendation_endpoint():
-    """Test endpoint to verify recommendations router is working"""
-    return {
-        "status": "ok",
-        "message": "Recommendations endpoint is working",
-        "endpoints": [
-            "POST /api/v1/recommendations - Get job recommendations"
-        ]
-    }

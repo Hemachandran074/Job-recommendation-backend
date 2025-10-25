@@ -104,8 +104,8 @@ async def get_recent_jobs(
         # Query recent jobs
         result = await db.execute(
             select(Job)
-            .where(Job.posted_date >= cutoff_date)
-            .order_by(desc(Job.posted_date))
+            .where(Job.created_at >= cutoff_date)
+            .order_by(desc(Job.created_at))
             .limit(limit)
         )
         jobs = result.scalars().all()
@@ -121,7 +121,7 @@ async def get_recent_jobs(
             "remote": job.remote,
             "description": job.description,
             "skills": job.skills,
-            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+            "posted_date": job.created_at.isoformat() if job.created_at else None,
             "url": job.url,
         } for job in jobs]
         

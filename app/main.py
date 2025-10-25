@@ -95,7 +95,7 @@ app.add_middleware(
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])  # ✅ CRITICAL!
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
 app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
-app.include_router(rapidapi.router, prefix="/api/v1", tags=["RapidAPI"])
+app.include_router(rapidapi.router, prefix="/api/v1/rapidapi", tags=["RapidAPI"])
 
 @app.get("/")
 async def root():

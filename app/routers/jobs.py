@@ -37,7 +37,7 @@ async def get_jobs(
     """
     try:
         # Build query
-        query = select(Job).order_by(desc(Job.posted_date))
+        query = select(Job).order_by(desc(Job.created_at))
         
         # Apply filters
         if job_type:

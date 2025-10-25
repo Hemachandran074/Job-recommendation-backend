@@ -5,521 +5,313 @@ Endpoints for fetching and ingesting jobs/internships from RapidAPI
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
+import httpx
 import logging
+from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.schemas import JobResponse, JobIngest
-from app.crud import create_job
-from app.rapidapi_service import rapidapi_service
-from app.ml_service import ml_service
+from app.models import Job
+from app.config import settings
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
-
-@router.get("/status")
-async def get_rapidapi_status():
-    """
-    Check if RapidAPI is configured and available
-    """
-    is_configured = rapidapi_service.is_configured()
-    
-    return {
-        "configured": is_configured,
-        "jobs_url": rapidapi_service.jobs_url if is_configured else None,
-        "internships_url": rapidapi_service.internships_url if is_configured else None,
-        "message": "RapidAPI is configured and ready" if is_configured else "RapidAPI key not configured"
-    }
+# RapidAPI Job Search API Configuration
+RAPIDAPI_BASE_URL = "https://job-search-api1.p.rapidapi.com"
+RAPIDAPI_HEADERS = {
+    "X-RapidAPI-Key": settings.RAPIDAPI_KEY,
+    "X-RapidAPI-Host": "job-search-api1.p.rapidapi.com"
+}
 
 
-@router.post("/fetch/jobs")
 async def fetch_jobs_from_rapidapi(
-    limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
+    title_filter: str = "software engineer",
+    location_filter: str = "India",
     remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
+    limit: int = 10,
+    offset: int = 0,
     date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
+    include_ai: bool = True,
     ai_work_arrangement_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
-):
+    description_type: str = "text"
+) -> List[dict]:
     """
-    Fetch jobs from RapidAPI and return them (without saving to database)
+    Fetch jobs from RapidAPI Job Search API
     
-    Query Parameters:
-    - **limit**: Maximum number of jobs to fetch (optional)
-    - **title_filter**: Filter by job title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote jobs (true/false)
-    - **agency**: Filter for agency jobs (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI jobs (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
+    Parameters (as per official documentation):
+    - title_filter: Search/filter jobs by title (Google-like syntax)
+    - location_filter: Filter by location (city/state/country)
+    - remote: true/false/None - filter remote-only, non-remote, or both
+    - limit: Number of jobs to return (max 10 per request)
+    - offset: Pagination offset
+    - date_filter: Filter jobs after date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+    - include_ai: Include AI-enriched fields (salary, skills, etc.)
+    - ai_work_arrangement_filter: On-site, Hybrid, Remote OK, Remote Solely
+    - description_type: 'text' or 'html'
     """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
-        )
-    
-    jobs = await rapidapi_service.fetch_jobs(
-        limit=limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    return {
-        "source": "rapidapi",
-        "type": "jobs",
-        "count": len(jobs),
-        "jobs": jobs
-    }
-
-
-@router.post("/fetch/internships")
-async def fetch_internships_from_rapidapi(
-    limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
-    remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
-    date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
-    ai_work_arrangement_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Fetch internships from RapidAPI and return them (without saving to database)
-    
-    Query Parameters:
-    - **limit**: Maximum number of internships to fetch (optional)
-    - **title_filter**: Filter by internship title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote internships (true/false)
-    - **agency**: Filter for agency internships (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI internships (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
-    """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
-        )
-    
-    internships = await rapidapi_service.fetch_internships(
-        limit=limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    return {
-        "source": "rapidapi",
-        "type": "internships",
-        "count": len(internships),
-        "internships": internships
-    }
-
-
-@router.post("/fetch/all")
-async def fetch_all_from_rapidapi(
-    jobs_limit: Optional[int] = None,
-    internships_limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
-    remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
-    date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
-    ai_work_arrangement_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Fetch both jobs and internships from RapidAPI with optional filtering
-    
-    Query Parameters:
-    - **jobs_limit**: Maximum number of jobs to fetch
-    - **internships_limit**: Maximum number of internships to fetch
-    - **title_filter**: Filter by title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote positions (true/false)
-    - **agency**: Filter for agency positions (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI positions (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
-    """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
-        )
-    
-    result = await rapidapi_service.fetch_all(
-        jobs_limit=jobs_limit,
-        internships_limit=internships_limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    return {
-        "source": "rapidapi",
-        "jobs_count": len(result["jobs"]),
-        "internships_count": len(result["internships"]),
-        "total_count": result["total"],
-        "jobs": result["jobs"],
-        "internships": result["internships"]
-    }
-
-
-@router.post("/ingest/jobs", response_model=dict)
-async def ingest_jobs_from_rapidapi(
-    limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
-    remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
-    date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
-    ai_work_arrangement_filter: Optional[str] = None,
-    background_tasks: BackgroundTasks = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Fetch jobs from RapidAPI and save them to the database with embeddings
-    
-    Query Parameters:
-    - **limit**: Maximum number of jobs to ingest
-    - **title_filter**: Filter by job title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote jobs (true/false)
-    - **agency**: Filter for agency jobs (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI jobs (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
-    
-    Returns summary of ingestion process
-    """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
-        )
-    
-    # Fetch jobs with filters
-    jobs = await rapidapi_service.fetch_jobs(
-        limit=limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    if not jobs:
-        return {
-            "source": "rapidapi",
-            "type": "jobs",
-            "fetched": 0,
-            "ingested": 0,
-            "failed": 0,
-            "message": "No jobs found from RapidAPI with given filters"
+    try:
+        # Build query parameters according to official API docs
+        params = {
+            "title_filter": title_filter,
+            "location_filter": location_filter,
+            "limit": min(limit, 10),  # Max 10 per request
+            "offset": offset,
+            "description_type": description_type,
+            "include_ai": str(include_ai).lower(),
         }
-    
-    # Ingest jobs to database
-    ingested = 0
-    failed = 0
-    errors = []
-    
-    for job_data in jobs:
-        try:
-            # Create JobIngest schema
-            job_ingest = JobIngest(**job_data)
+        
+        # Add optional parameters
+        if remote is not None:
+            params["remote"] = str(remote).lower()
+        
+        if date_filter:
+            params["date_filter"] = date_filter
+        
+        if ai_work_arrangement_filter:
+            params["ai_work_arrangement_filter"] = ai_work_arrangement_filter
+        
+        logger.info(f"📡 Fetching jobs from RapidAPI with params: {params}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{RAPIDAPI_BASE_URL}/jobs",
+                headers=RAPIDAPI_HEADERS,
+                params=params
+            )
+            response.raise_for_status()
+            data = response.json()
             
-            # Create job with embedding
-            await create_job(db, job_ingest)
-            ingested += 1
+            jobs = data.get("jobs", [])
+            logger.info(f"✅ Fetched {len(jobs)} jobs from RapidAPI")
             
-        except Exception as e:
-            failed += 1
-            error_msg = f"Failed to ingest job '{job_data.get('title')}': {str(e)}"
-            logger.error(error_msg)
-            errors.append(error_msg)
-    
+            return jobs
+            
+    except httpx.HTTPStatusError as e:
+        logger.error(f"❌ RapidAPI HTTP error: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"RapidAPI error: {e.response.text}"
+        )
+    except Exception as e:
+        logger.error(f"❌ Error fetching from RapidAPI: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch jobs: {str(e)}"
+        )
+
+
+def transform_rapidapi_job(api_job: dict) -> dict:
+    """
+    Transform RapidAPI job data to our database schema
+    """
     return {
-        "source": "rapidapi",
-        "type": "jobs",
-        "fetched": len(jobs),
-        "ingested": ingested,
-        "failed": failed,
-        "errors": errors[:5] if errors else None,  # Return first 5 errors
-        "message": f"Successfully ingested {ingested} jobs, {failed} failed"
+        "title": api_job.get("title", ""),
+        "company": api_job.get("company", "Unknown Company"),
+        "location": api_job.get("location", ""),
+        "job_type": api_job.get("employment_type", "Full Time"),
+        "remote": api_job.get("remote", False),
+        "description": api_job.get("description", ""),
+        "skills": api_job.get("required_skills", []) or [],
+        "url": api_job.get("url", ""),
+        "salary_min": api_job.get("salary_min"),
+        "salary_max": api_job.get("salary_max"),
+        "experience_required": api_job.get("experience_required"),
+        # AI-enriched fields (if include_ai=true)
+        "ai_salary": api_job.get("ai_salary"),
+        "ai_skills": api_job.get("ai_skills", []),
+        "ai_work_arrangement": api_job.get("ai_work_arrangement"),
     }
 
 
-@router.post("/ingest/internships", response_model=dict)
-async def ingest_internships_from_rapidapi(
-    limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
+@router.post("/ingest/jobs")
+async def ingest_jobs(
+    background_tasks: BackgroundTasks,
+    title_filter: str = "software engineer",
+    location_filter: str = "India",
     remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
+    total_jobs: int = 50,
+    include_ai: bool = True,
     date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
     ai_work_arrangement_filter: Optional[str] = None,
-    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Fetch internships from RapidAPI and save them to the database with embeddings
+    Ingest jobs from RapidAPI Job Search API into database
     
-    Query Parameters:
-    - **limit**: Maximum number of internships to ingest
-    - **title_filter**: Filter by internship title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote internships (true/false)
-    - **agency**: Filter for agency internships (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI internships (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
+    Parameters:
+    - title_filter: Job title to search (e.g., "software engineer", "data scientist")
+    - location_filter: Location to search (e.g., "India", "Bangalore India", "United States")
+    - remote: Filter for remote jobs (true/false/None for both)
+    - total_jobs: Total number of jobs to fetch (will make multiple API calls of 10 each)
+    - include_ai: Include AI-enriched data (salary, skills, work arrangement)
+    - date_filter: Only jobs posted after this date (YYYY-MM-DD)
+    - ai_work_arrangement_filter: Filter by arrangement (On-site, Hybrid, Remote OK, Remote Solely)
     
-    Returns summary of ingestion process
+    Example usage:
+    POST /api/v1/rapidapi/ingest/jobs?title_filter=python developer&location_filter=Bangalore India&remote=true&total_jobs=50
     """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
-        )
-    
-    # Fetch internships with filters
-    internships = await rapidapi_service.fetch_internships(
-        limit=limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    if not internships:
+    try:
+        logger.info(f"🚀 Starting job ingestion: {total_jobs} jobs for '{title_filter}' in '{location_filter}'")
+        
+        all_jobs = []
+        limit_per_request = 10  # API max
+        num_requests = (total_jobs + limit_per_request - 1) // limit_per_request
+        
+        # Make multiple requests to fetch all jobs
+        for i in range(num_requests):
+            offset = i * limit_per_request
+            
+            jobs_batch = await fetch_jobs_from_rapidapi(
+                title_filter=title_filter,
+                location_filter=location_filter,
+                remote=remote,
+                limit=limit_per_request,
+                offset=offset,
+                date_filter=date_filter,
+                include_ai=include_ai,
+                ai_work_arrangement_filter=ai_work_arrangement_filter
+            )
+            
+            all_jobs.extend(jobs_batch)
+            
+            # Stop if we got fewer jobs than requested (no more available)
+            if len(jobs_batch) < limit_per_request:
+                break
+        
+        logger.info(f"📦 Fetched total of {len(all_jobs)} jobs from RapidAPI")
+        
+        # Transform and store jobs
+        stored_count = 0
+        duplicate_count = 0
+        
+        for api_job in all_jobs:
+            try:
+                job_data = transform_rapidapi_job(api_job)
+                
+                # Check if job already exists (by URL or title+company)
+                from sqlalchemy import select, or_
+                result = await db.execute(
+                    select(Job).where(
+                        or_(
+                            Job.url == job_data["url"],
+                            (Job.title == job_data["title"]) & (Job.company == job_data["company"])
+                        )
+                    )
+                )
+                existing_job = result.scalar_one_or_none()
+                
+                if existing_job:
+                    duplicate_count += 1
+                    continue
+                
+                # Create new job
+                new_job = Job(**job_data)
+                db.add(new_job)
+                stored_count += 1
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to store job: {e}")
+                continue
+        
+        await db.commit()
+        
+        logger.info(f"✅ Ingestion complete: {stored_count} new jobs stored, {duplicate_count} duplicates skipped")
+        
         return {
-            "source": "rapidapi",
-            "type": "internships",
-            "fetched": 0,
-            "ingested": 0,
-            "failed": 0,
-            "message": "No internships found from RapidAPI with given filters"
+            "status": "success",
+            "total_fetched": len(all_jobs),
+            "stored": stored_count,
+            "duplicates": duplicate_count,
+            "search_params": {
+                "title_filter": title_filter,
+                "location_filter": location_filter,
+                "remote": remote,
+                "include_ai": include_ai
+            }
         }
-    
-    # Ingest internships to database
-    ingested = 0
-    failed = 0
-    errors = []
-    
-    for internship_data in internships:
-        try:
-            # Create JobIngest schema
-            internship_ingest = JobIngest(**internship_data)
-            
-            # Create internship with embedding
-            await create_job(db, internship_ingest)
-            ingested += 1
-            
-        except Exception as e:
-            failed += 1
-            error_msg = f"Failed to ingest internship '{internship_data.get('title')}': {str(e)}"
-            logger.error(error_msg)
-            errors.append(error_msg)
-    
-    return {
-        "source": "rapidapi",
-        "type": "internships",
-        "fetched": len(internships),
-        "ingested": ingested,
-        "failed": failed,
-        "errors": errors[:5] if errors else None,
-        "message": f"Successfully ingested {ingested} internships, {failed} failed"
-    }
+        
+    except Exception as e:
+        logger.error(f"❌ Job ingestion failed: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Job ingestion failed: {str(e)}"
+        )
 
 
-@router.post("/ingest/all", response_model=dict)
-async def ingest_all_from_rapidapi(
-    jobs_limit: Optional[int] = None,
-    internships_limit: Optional[int] = None,
-    title_filter: Optional[str] = None,
-    advanced_title_filter: Optional[str] = None,
-    location_filter: Optional[str] = None,
-    description_filter: Optional[str] = None,
-    description_type: Optional[str] = None,
+@router.get("/search/jobs")
+async def search_jobs(
+    title_filter: str = "software engineer",
+    location_filter: str = "India",
     remote: Optional[bool] = None,
-    agency: Optional[bool] = None,
-    offset: Optional[int] = None,
+    limit: int = 10,
+    offset: int = 0,
+    include_ai: bool = True,
     date_filter: Optional[str] = None,
-    include_ai: Optional[bool] = None,
-    ai_work_arrangement_filter: Optional[str] = None,
-    background_tasks: BackgroundTasks = None,
-    db: AsyncSession = Depends(get_db)
+    ai_work_arrangement_filter: Optional[str] = None
 ):
     """
-    Fetch and ingest both jobs and internships from RapidAPI with optional filtering
+    Search jobs from RapidAPI without storing (live search)
     
-    Query Parameters:
-    - **jobs_limit**: Maximum number of jobs to ingest
-    - **internships_limit**: Maximum number of internships to ingest
-    - **title_filter**: Filter by title
-    - **advanced_title_filter**: Advanced title filtering
-    - **location_filter**: Filter by location
-    - **description_filter**: Filter by description
-    - **description_type**: Type of description
-    - **remote**: Filter for remote positions (true/false)
-    - **agency**: Filter for agency positions (true/false)
-    - **offset**: Pagination offset
-    - **date_filter**: Filter by date
-    - **include_ai**: Include AI positions (true/false)
-    - **ai_work_arrangement_filter**: AI work arrangement filter
-    
-    Returns summary of entire ingestion process
+    Returns raw results from RapidAPI Job Search API
     """
-    if not rapidapi_service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="RapidAPI is not configured. Please set RAPIDAPI_KEY in environment variables."
+    try:
+        jobs = await fetch_jobs_from_rapidapi(
+            title_filter=title_filter,
+            location_filter=location_filter,
+            remote=remote,
+            limit=limit,
+            offset=offset,
+            include_ai=include_ai,
+            date_filter=date_filter,
+            ai_work_arrangement_filter=ai_work_arrangement_filter
         )
-    
-    # Fetch all data with filters
-    result = await rapidapi_service.fetch_all(
-        jobs_limit=jobs_limit,
-        internships_limit=internships_limit,
-        title_filter=title_filter,
-        advanced_title_filter=advanced_title_filter,
-        location_filter=location_filter,
-        description_filter=description_filter,
-        description_type=description_type,
-        remote=remote,
-        agency=agency,
-        offset=offset,
-        date_filter=date_filter,
-        include_ai=include_ai,
-        ai_work_arrangement_filter=ai_work_arrangement_filter,
-    )
-    
-    # Ingest jobs
-    jobs_ingested = 0
-    jobs_failed = 0
-    for job_data in result["jobs"]:
-        try:
-            job_ingest = JobIngest(**job_data)
-            await create_job(db, job_ingest)
-            jobs_ingested += 1
-        except Exception as e:
-            jobs_failed += 1
-            logger.error(f"Failed to ingest job: {str(e)}")
-    
-    # Ingest internships
-    internships_ingested = 0
-    internships_failed = 0
-    for internship_data in result["internships"]:
-        try:
-            internship_ingest = JobIngest(**internship_data)
-            await create_job(db, internship_ingest)
-            internships_ingested += 1
-        except Exception as e:
-            internships_failed += 1
-            logger.error(f"Failed to ingest internship: {str(e)}")
-    
-    return {
-        "source": "rapidapi",
-        "jobs": {
-            "fetched": len(result["jobs"]),
-            "ingested": jobs_ingested,
-            "failed": jobs_failed
-        },
-        "internships": {
-            "fetched": len(result["internships"]),
-            "ingested": internships_ingested,
-            "failed": internships_failed
-        },
-        "total_ingested": jobs_ingested + internships_ingested,
-        "total_failed": jobs_failed + internships_failed,
-        "message": f"Ingested {jobs_ingested} jobs and {internships_ingested} internships"
-    }
+        
+        return {
+            "status": "success",
+            "count": len(jobs),
+            "jobs": jobs,
+            "search_params": {
+                "title_filter": title_filter,
+                "location_filter": location_filter,
+                "remote": remote,
+                "include_ai": include_ai
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Job search failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Job search failed: {str(e)}"
+        )
+
+
+@router.get("/test")
+async def test_rapidapi_connection():
+    """
+    Test RapidAPI connection and credentials
+    """
+    try:
+        # Try fetching just 1 job to test connection
+        jobs = await fetch_jobs_from_rapidapi(
+            title_filter="engineer",
+            location_filter="India",
+            limit=1
+        )
+        
+        return {
+            "status": "success",
+            "message": "RapidAPI connection working",
+            "api_key_valid": True,
+            "sample_job_count": len(jobs),
+            "sample_job": jobs[0] if jobs else None
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ RapidAPI test failed: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "api_key_valid": False
+        }

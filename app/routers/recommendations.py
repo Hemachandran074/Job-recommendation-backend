@@ -5,17 +5,153 @@ Endpoints for getting personalized job recommendations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from typing import List
+from typing import List, Optional
 import logging
 from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import User, Job
 from app.ml_service import ml_service
+from app.schemas import RecommendationQuery
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("")
+async def get_recommendations(
+    query: RecommendationQuery,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get job recommendations based on user ID or search query
+    
+    This endpoint supports:
+    - User-based recommendations (provide user_id)
+    - Search-based recommendations (provide query text)
+    """
+    try:
+        # If user_id provided, get recommendations for that user
+        if query.user_id:
+            user_id = str(query.user_id)
+            
+            # Get user
+            result = await db.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            if not user.skills or len(user.skills) == 0:
+                return {
+                    "user_id": user_id,
+                    "recommendations": [],
+                    "message": "No skills found. Please complete your profile."
+                }
+            
+            # Get all jobs
+            result = await db.execute(select(Job))
+            all_jobs = result.scalars().all()
+            
+            if not all_jobs:
+                return {
+                    "user_id": user_id,
+                    "recommendations": [],
+                    "message": "No jobs available in database"
+                }
+            
+            # Score and rank jobs based on user skills
+            scored_jobs = []
+            user_skills_lower = [s.lower() for s in user.skills]
+            user_location = user.location.lower() if user.location else ""
+            
+            for job in all_jobs:
+                score = 0
+                match_reasons = []
+                
+                # Skill matching (most important)
+                job_skills_lower = [s.lower() for s in (job.skills or [])]
+                matching_skills = set(user_skills_lower) & set(job_skills_lower)
+                
+                if matching_skills:
+                    score += len(matching_skills) * 20
+                    match_reasons.append(f"Matches your skills: {', '.join(list(matching_skills)[:3])}")
+                
+                # Location matching
+                if user_location and job.location:
+                    if user_location in job.location.lower():
+                        score += 30
+                        match_reasons.append(f"Location match: {job.location}")
+                
+                # Recent jobs bonus
+                if job.posted_date:
+                    days_old = (datetime.utcnow() - job.posted_date).days
+                    if days_old <= 7:
+                        score += 10
+                        match_reasons.append("Recently posted")
+                
+                # Remote jobs bonus
+                if job.remote:
+                    score += 5
+                    match_reasons.append("Remote position")
+                
+                if score > 0:
+                    scored_jobs.append({
+                        "job": {
+                            "id": str(job.id),
+                            "title": job.title,
+                            "company": job.company,
+                            "location": job.location,
+                            "job_type": job.job_type,
+                            "remote": job.remote,
+                            "description": job.description,
+                            "skills": job.skills,
+                            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+                        },
+                        "match_score": score,
+                        "match_reasons": match_reasons
+                    })
+            
+            # Sort by score and return top N
+            scored_jobs.sort(key=lambda x: x["match_score"], reverse=True)
+            top_recommendations = scored_jobs[:query.limit]
+            
+            logger.info(f"✅ Generated {len(top_recommendations)} recommendations for user {user_id}")
+            
+            return {
+                "user_id": user_id,
+                "user_skills": user.skills,
+                "recommendations": top_recommendations,
+                "total_matches": len(scored_jobs)
+            }
+        
+        # If query text provided, search for matching jobs
+        elif query.query:
+            # TODO: Implement text-based search using ML embeddings
+            logger.warning("Text-based search not yet implemented")
+            return {
+                "query": query.query,
+                "recommendations": [],
+                "message": "Text-based search coming soon"
+            }
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Either user_id or query must be provided"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating recommendations: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate recommendations: {str(e)}"
+        )
 
 
 @router.get("/{user_id}")

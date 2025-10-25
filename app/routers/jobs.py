@@ -18,6 +18,72 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("")
+async def get_jobs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    job_type: Optional[str] = None,
+    remote: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all jobs with optional filters and pagination
+    
+    Parameters:
+    - skip: Number of jobs to skip (for pagination)
+    - limit: Maximum number of jobs to return (1-100)
+    - job_type: Filter by job type (e.g., 'full-time', 'internship')
+    - remote: Filter by remote status (true/false)
+    """
+    try:
+        # Build query
+        query = select(Job).order_by(desc(Job.posted_date))
+        
+        # Apply filters
+        if job_type:
+            query = query.where(Job.job_type == job_type)
+        
+        if remote is not None:
+            query = query.where(Job.remote == remote)
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        # Execute query
+        result = await db.execute(query)
+        jobs = result.scalars().all()
+        
+        logger.info(f"✅ Found {len(jobs)} jobs (skip={skip}, limit={limit})")
+        
+        return [{
+            "_id": str(job.id),  # Dashboard expects _id
+            "id": str(job.id),
+            "title": job.title,
+            "company_name": job.company,
+            "company": job.company,
+            "location": job.location,
+            "type": job.job_type or "Full Time",
+            "job_type": job.job_type,
+            "remote": job.remote,
+            "salary": f"${job.salary_min or 0}-${job.salary_max or 0}" if job.salary_min else "Competitive",
+            "salary_min": job.salary_min,
+            "salary_max": job.salary_max,
+            "description": job.description,
+            "skills": job.skills or [],
+            "period": f"{(datetime.utcnow() - job.posted_date).days} days ago" if job.posted_date else "Recently",
+            "posted_date": job.posted_date.isoformat() if job.posted_date else None,
+            "created_at": job.created_at.isoformat() if hasattr(job, 'created_at') and job.created_at else None,
+            "url": job.url,
+        } for job in jobs]
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching jobs: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch jobs: {str(e)}"
+        )
+
+
 @router.get("/recent")
 async def get_recent_jobs(
     limit: int = Query(10, ge=1, le=100),

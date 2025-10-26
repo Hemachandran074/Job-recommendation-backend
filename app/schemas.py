@@ -77,18 +77,28 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Schema for updating user profile"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
-    skills: Optional[List[str]] = None
+    skills: Optional[List[str]] = None  # ["Python", "Machine Learning", "Django"]
+    preferred_job_titles: Optional[List[str]] = None  # ["Software Engineer", "ML Engineer"]
     experience_years: Optional[int] = Field(None, ge=0, le=50)
-    preferred_job_type: Optional[str] = None
-    preferred_locations: Optional[List[str]] = None
+    experience_level: Optional[str] = None  # "Entry", "Mid", "Senior"
+    preferred_job_type: Optional[str] = None  # "Full Time", "Part Time", etc.
+    preferred_locations: Optional[List[str]] = None  # ["Bangalore", "Chennai", "Coimbatore"]
     resume_text: Optional[str] = None
+    location: Optional[str] = None  # Current location
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    portfolio: Optional[str] = None
 
 
 class UserResponse(UserBase):
     """Schema for user response"""
     id: UUID
     skills: Optional[List[str]] = None
+    preferred_job_titles: Optional[List[str]] = None
     experience_years: Optional[int] = None
+    experience_level: Optional[str] = None
     preferred_job_type: Optional[str] = None
     preferred_locations: Optional[List[str]] = None
     location: Optional[str] = None

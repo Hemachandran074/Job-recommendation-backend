@@ -26,10 +26,10 @@ class Job(Base):
     experience_level = Column(String(50), nullable=True)  # entry, mid, senior
     remote = Column(Boolean, default=False)
     url = Column(String(500), nullable=True)
-    source = Column(String(100), nullable=True)  # rapidapi, manual, etc.
+    source = Column(String(100), nullable=True)  # rapidapi, manual, dummy, etc.
     
-    # Vector embedding for semantic search
-    embedding = Column(Vector(settings.EMBEDDING_DIMENSION), nullable=False)
+    # Vector embedding for semantic search (nullable for now - generate later if needed)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSION), nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -48,10 +48,12 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)  # Optional for now
     
     # Profile information
-    skills = Column(JSON, nullable=True)  # List of user skills
+    skills = Column(JSON, nullable=True)  # List of user skills (e.g., ["Python", "Machine Learning"])
+    preferred_job_titles = Column(JSON, nullable=True)  # Job titles user wants (e.g., ["Software Engineer", "ML Engineer"])
     experience_years = Column(Integer, nullable=True)
-    preferred_job_type = Column(String(50), nullable=True)
-    preferred_locations = Column(JSON, nullable=True)
+    experience_level = Column(String(50), nullable=True)  # Entry, Mid, Senior
+    preferred_job_type = Column(String(50), nullable=True)  # Full Time, Part Time, etc.
+    preferred_locations = Column(JSON, nullable=True)  # Cities user wants (e.g., ["Bangalore", "Chennai"])
     resume_text = Column(Text, nullable=True)
     
     # Additional profile fields

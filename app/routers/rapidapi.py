@@ -119,7 +119,8 @@ def transform_rapidapi_job(api_job: dict) -> dict:
     if api_job.get("seniority"):
         description_parts.append(f"Seniority Level: {api_job.get('seniority')}")
     
-    description = " | ".join(description_parts) if description_parts else "No description available"
+    # Ensure description is never empty
+    description = " | ".join(description_parts) if description_parts else f"{company} is hiring for {api_job.get('title', 'this position')}"
     
     # Extract salary if available
     salary_raw = api_job.get("salary_raw", "")
@@ -206,7 +207,11 @@ async def ingest_jobs(
                 stored_count += 1
                 
             except Exception as e:
-                logger.warning(f"⚠️ Failed to store job: {e}")
+                logger.error(f"⚠️ Failed to store job '{api_job.get('title', 'Unknown')}': {str(e)}")
+                logger.error(f"   Job data keys: {list(job_data.keys()) if 'job_data' in locals() else 'N/A'}")
+                logger.error(f"   Error type: {type(e).__name__}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
                 continue
         
         await db.commit()

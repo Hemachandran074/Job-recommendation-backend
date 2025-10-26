@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import Job
 from app.config import settings
+from app.ml_service import ml_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -192,6 +193,11 @@ async def ingest_jobs(
                 if existing_job:
                     duplicate_count += 1
                     continue
+                
+                # Generate embedding for the job
+                job_text = f"{job_data['title']} {job_data['company']} {job_data['location']} {job_data['description']}"
+                embedding = ml_service.generate_embedding(job_text)
+                job_data["embedding"] = embedding
                 
                 # Create new job
                 new_job = Job(**job_data)

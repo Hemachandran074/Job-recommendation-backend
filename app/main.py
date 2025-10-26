@@ -13,7 +13,7 @@ from app.database import init_db, close_db, get_engine
 from app.ml_service import ml_service
 
 # Import routers
-from app.routers import jobs, recommendations, users, rapidapi  # ✅ Make sure users is imported
+from app.routers import jobs, recommendations, users, rapidapi, admin  # ✅ Added admin
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,7 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])  # ✅ 
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
 app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
 app.include_router(rapidapi.router, prefix="/api/v1/rapidapi", tags=["RapidAPI"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])  # ✅ Migration endpoint
 
 @app.get("/")
 async def root():

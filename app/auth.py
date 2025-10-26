@@ -22,20 +22,30 @@ class TokenData:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash"""
-    # Convert strings to bytes
-    password_bytes = plain_password.encode('utf-8')
-    hash_bytes = hashed_password.encode('utf-8')
-    return bcrypt.checkpw(password_bytes, hash_bytes)
+    try:
+        # bcrypt 4.x handles string/bytes automatically
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8') if isinstance(plain_password, str) else plain_password,
+            hashed_password.encode('utf-8') if isinstance(hashed_password, str) else hashed_password
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Password verification error: {e}")
+        return False
 
 def get_password_hash(password: str) -> str:
     """Hash password using bcrypt"""
-    # Convert password to bytes
-    password_bytes = password.encode('utf-8')
-    # Generate salt and hash
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    # Return as string
-    return hashed.decode('utf-8')
+    try:
+        # bcrypt 4.x handles string/bytes automatically
+        password_bytes = password.encode('utf-8') if isinstance(password, str) else password
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        # Return as string
+        return hashed.decode('utf-8') if isinstance(hashed, bytes) else hashed
+    except Exception as e:
+        import logging
+        logging.error(f"Password hashing error: {e}")
+        raise
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""

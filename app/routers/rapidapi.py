@@ -85,24 +85,56 @@ async def fetch_jobs_from_rapidapi(
 
 def transform_rapidapi_job(api_job: dict) -> dict:
     """
-    Transform RapidAPI job data to our database schema
+    Transform RapidAPI Internships API job data to our database schema
+    
+    API returns fields like:
+    - title, organization, locations_derived, employment_type, url, etc.
     """
+    # Extract location
+    location = api_job.get("locations_derived", "") or api_job.get("cities_derived", "") or ""
+    
+    # Extract company name
+    company = api_job.get("organization", "") or api_job.get("company", "Unknown Company")
+    
+    # Extract employment type and map to our schema
+    employment_type = api_job.get("employment_type", "FULL_TIME")
+    job_type_mapping = {
+        "INTERN": "Internship",
+        "FULL_TIME": "Full Time",
+        "PART_TIME": "Part Time",
+        "CONTRACT": "Contract"
+    }
+    job_type = job_type_mapping.get(employment_type, "Full Time")
+    
+    # Check if remote
+    remote = api_job.get("remote_derived", False) or api_job.get("remote", False)
+    
+    # Build description from available fields
+    description_parts = []
+    if api_job.get("linkedin_org_description"):
+        description_parts.append(api_job.get("linkedin_org_description"))
+    if api_job.get("linkedin_org_industry"):
+        description_parts.append(f"Industry: {api_job.get('linkedin_org_industry')}")
+    if api_job.get("seniority"):
+        description_parts.append(f"Seniority Level: {api_job.get('seniority')}")
+    
+    description = " | ".join(description_parts) if description_parts else "No description available"
+    
+    # Extract salary if available
+    salary_raw = api_job.get("salary_raw", "")
+    
     return {
-        "title": api_job.get("title", ""),
-        "company": api_job.get("company", "Unknown Company"),
-        "location": api_job.get("location", ""),
-        "job_type": api_job.get("employment_type", "Full Time"),
-        "remote": api_job.get("remote", False),
-        "description": api_job.get("description", ""),
-        "skills": api_job.get("required_skills", []) or [],
+        "title": api_job.get("title", "Untitled Position"),
+        "company": company,
+        "location": location,
+        "job_type": job_type,
+        "remote": remote,
+        "description": description[:2000],  # Limit description length
+        "skills": [],  # This API doesn't provide skills directly
         "url": api_job.get("url", ""),
-        "salary_min": api_job.get("salary_min"),
-        "salary_max": api_job.get("salary_max"),
-        "experience_required": api_job.get("experience_required"),
-        # AI-enriched fields (if include_ai=true)
-        "ai_salary": api_job.get("ai_salary"),
-        "ai_skills": api_job.get("ai_skills", []),
-        "ai_work_arrangement": api_job.get("ai_work_arrangement"),
+        "salary_min": None,  # Not structured in this API
+        "salary_max": None,
+        "experience_required": api_job.get("seniority", ""),
     }
 
 

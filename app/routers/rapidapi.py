@@ -135,7 +135,8 @@ def transform_rapidapi_job(api_job: dict) -> dict:
         "url": api_job.get("url", ""),
         "salary_min": None,  # Not structured in this API
         "salary_max": None,
-        "experience_required": api_job.get("seniority", ""),
+        "experience_level": api_job.get("seniority", ""),  # FIXED: was experience_required
+        "source": "rapidapi_internships"
     }
 
 

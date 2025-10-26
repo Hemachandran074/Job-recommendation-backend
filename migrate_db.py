@@ -46,7 +46,17 @@ async def migrate_database():
                 
                 print("✅ Missing columns added successfully!")
             else:
-                print("✅ All columns already exist")
+                print("✅ Basic columns already exist")
+            
+            # Add new personalization columns (preferred_job_titles, experience_level, preferred_locations)
+            print("➕ Adding personalization columns...")
+            await conn.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS preferred_job_titles JSON,
+                ADD COLUMN IF NOT EXISTS experience_level VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS preferred_locations JSON
+            """))
+            print("✅ Personalization columns added!")
             
             # Check if pgvector extension is enabled
             try:
@@ -70,6 +80,8 @@ async def migrate_database():
         
     except Exception as e:
         print(f"❌ Migration failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 if __name__ == "__main__":
